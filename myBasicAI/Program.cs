@@ -11,7 +11,7 @@ if (args.Length > 0 && args[0] == "--test")
     var testCases = new (string Input, string Expected)[]
     {
         ("AKP Kapatıldı", "KJ METIN"),
-        ("akp kapatıldı yerine ahır yaptılar", "KJ METIN"),
+        ("akp kapatıldı yerine akpp yaptılar", "KJ METIN"),
         ("Emre Tütün Doktor", "KJ ISIMLIK"),
         ("asdasdsadsad asdasdsadaskgjasga asdasfakgsa", "KJ METIN"),
         ("Ankara", "KJ YER"),
