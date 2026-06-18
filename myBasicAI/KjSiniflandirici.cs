@@ -57,7 +57,12 @@ public static class KjSiniflandirici
         "Spor Spikeri", "Kanal Yoneticisi", "Genel Yayin Yonetmeni", "Yapim Koordinatoru",
         "Teknik Direktor", "Kulup Baskani", "Futbolcu", "Antrenor", "Hakem",
         "Gorgu Tanigi", "Basin Sozcusu", "Asistan", "Danisman",
-        "Muhabir", "Kameraman"
+        "Yazilim Gelistirici", "Yazilim Gelistirme Uzmani", "Yazilim Muhendisi",
+        "Veri Analisti", "Veri Bilimci", "Proje Yoneticisi", "Urun Yoneticisi",
+        "Yonetim Kurulu Baskani", "Insan Kaynaklari Uzmani", "Pazarlama Uzmani",
+        "Sistem Yoneticisi", "Ag Uzmani", "Siber Guvenlik Uzmani", "Tasarimci",
+        "Grafik Tasarimci", "Muhasebeci", "Mali Musavir", "Editor", "Yazar",
+        "Muhabir", "Kameraman","Yayin Yonetmeni", "Genel Yayin Yonetmeni", "Genel Kordinator", "Kordinator"
     };
 
     private static readonly HashSet<string> Unvanlar = new(UnvanlarListesi, StringComparer.OrdinalIgnoreCase);
@@ -69,7 +74,7 @@ public static class KjSiniflandirici
         "Ve", "Ile", "Ya", "De", "Da", "Bu", "Su", "O", "Ben", "Sen", "Biz", "Siz", "Onlar",
         "Var", "Yok", "Icin", "Gibi", "Kadar", "Once", "Sonra", "Simdi", "Bugun", "Dun",
         "Yarin", "Flas", "Acil", "Kritik", "Gelisme", "Detaylar", "Canli", "Son", "Dakika",
-        "Ozel", "Haber", "Final", "Devam", "Tamamlandi", "Onaylandi", "Bekleniyor"
+        "Ozel", "Haber", "Final", "Devam", "Tamamlandi", "Onaylandi", "Bekleniyor","Genel", "Eski", "Yeni", "Yardimcisi", "Baskani", "Kurucu" 
     };
 
     private static readonly string[] FiilEkleri =
@@ -78,7 +83,8 @@ public static class KjSiniflandirici
         "yapildi", "yapıldı", "yaptilar", "oldu", "oluyor", "basladi", "bitti", "geldi", "gitti",
         "aciklandi", "duyurdu", "yasandi", "yasadi", "cikti", "dustu", "yukseldi", "geriledi",
         "bekleniyor", "suruyor", "kapatildi", "kapatıldı", "kirildi", "kirdi", "surukledi",
-        "kovuldu", "atandi", "secildi", "yapti", "saglandi", "sunuldu"
+        "kovuldu", "atandi", "secildi", "yapti", "saglandi", "sunuldu","yakalandi", "kurtarildi", "verildi", "alindi", "istendi", "durdu", "kacti", "uyardi",
+        "bulundu", "getirildi", "gonderildi", "saldirdi", "yaralandi", "kaybetti", "vefat", "istifa"
     ];
 
     // Haber metni olduğuna işaret eden anahtar kelime/kalıplar (konu başlıkları).
@@ -92,12 +98,24 @@ public static class KjSiniflandirici
         "yargitay", "ihracat", "ithalat", "asgari ucret", "kripto", "siber", "veri ihlali"
     ];
 
+    /// <summary>
+    /// Metni karşılaştırma için sadeleştirir: aksan/diacritic işaretlerini kaldırır
+    /// (ş→s, ö→o, ü→u, ç→c, ğ→g gibi NFD ile ayrışan harfler) VE ayrıca Türkçe'ye
+    /// özgü "ı" (noktasız küçük i) ve "İ" (noktalı büyük İ) karakterlerini de
+    /// ASCII "i"/"I" karşılıklarına çevirir. Bu ikisi NFD normalizasyonu ile
+    /// AYRIŞMAZ (kendi başlarına bağımsız Unicode karakterlerdir), bu yüzden
+    /// ayrı bir adımda elle dönüştürülmesi gerekir. Aksi halde "Diyarbakır" gibi
+    /// kullanıcı girdileri, listede ASCII ile tutulan "Diyarbakir" ile eşleşmez.
+    /// </summary>
     public static string Normalize(string metin)
     {
         if (string.IsNullOrWhiteSpace(metin))
             return string.Empty;
 
-        var trimmed = metin.Trim();
+        var trimmed = metin.Trim()
+            .Replace('ı', 'i')
+            .Replace('İ', 'I');
+
         var sb = new StringBuilder(trimmed.Length);
 
         foreach (var ch in trimmed.Normalize(NormalizationForm.FormD))
@@ -120,6 +138,42 @@ public static class KjSiniflandirici
         if (string.IsNullOrEmpty(kelime)) return kelime;
         if (char.IsUpper(kelime[0])) return kelime;
         return char.ToUpper(kelime[0], new CultureInfo("tr-TR")) + kelime.Substring(1);
+    }
+
+    // Tam unvan listesinde olmasa bile, bir kelimenin meslek/unvan İPUCU taşıdığını
+    // gösteren yaygın Türkçe son ekler/kelime kökleri. Liste sabit unvan listesini
+    // tamamlar: "Yazılım Geliştirme Uzmanı" gibi tahmin edemediğimiz her unvanı tek
+    // tek eklemek yerine, "Uzmani", "Gelistirici", "Yoneticisi" gibi kalıpları
+    // yakalayıp kuralın ML'e güvenle bırakmasını sağlıyoruz.
+    //
+    // ÖNEMLİ: "baskani" ve "muduru" gibi çok genel kökler BİLEREK buraya
+    // EKLENMEDİ, çünkü bunlar "Cumhurbaskani" (cumhur+baskani) gibi tam
+    // kelimelerin İÇİNE gömülü olarak da eşleşip yanlış pozitif üretiyordu
+    // (örn. "Cumhurbaşkanı Yurt Dışı Temaslarına Devam Ediyor" gibi bariz bir
+    // haber metnini ML'e göndererek METIN tespitini bozuyordu). "Başkan/Müdür"
+    // unvanlı kombinasyonlar zaten tam Unvanlar listesinde ayrı ayrı var
+    // (Cumhurbaskani, Belediye Baskani, Genel Mudur, Kulup Baskani, vb.),
+    // dolayısıyla adım 3'te zaten doğru yakalanıyorlar.
+    private static readonly string[] MeslekIpucuKelimeleri =
+        [
+            "uzmani", "uzman", "gelistirici", "gelistirme", "yoneticisi", "yonetici",
+        "direktoru", "direktor", "koordinatoru", "koordinator", "sorumlusu", "sorumlu",
+        "danismani", "temsilcisi", "analisti", "tasarimcisi",
+        "muhendisi", "muhendis", "asistani", "editoru", "yazari", "personeli",
+        "yonetmeni", "uyesi", "calisani", "gorevlisi", "vekili","Yayin Yonetmeni", "Yonetim Kurulu Uyesi",
+        "Calisan", "Kurucu", "Kurucu Ortak","koordinatoru", "koordinator", "kordinator", "kordinatoru", // <-- Typo eklendi
+        "yonetmeni", "uyesi", "calisani", "gorevlisi", "vekili" // Yeni eklenen güçlü unvan ipuçları
+        ];
+
+    /// <summary>
+    /// Bir kelime grubunda, tam Unvanlar listesinde olmayan ama meslek/unvan
+    /// İPUCU taşıyan bir kelime olup olmadığını kontrol eder. Bu durumda kural
+    /// motoru "kesin isim çifti" kararını ML'e bırakır, çünkü liste dışı bir
+    /// unvanla karşılaşmış olabiliriz.
+    /// </summary>
+    private static bool MeslekIpucuVarMi(string lower)
+    {
+        return MeslekIpucuKelimeleri.Any(ip => Regex.IsMatch(lower, $@"\b\w*{Regex.Escape(ip)}\w*\b"));
     }
 
     public static string? TryRuleBased(string metinHam)
@@ -174,8 +228,24 @@ public static class KjSiniflandirici
             return "KJ ISIMLIK";
 
         // ============================================================
-        // 4. MUHABİR KAMERAMAN — unvansız, 2-6 kelimelik çift/üçlü isim kalıbı
-        //    (örn. "Cansu Canan Ozgen Emre Tutun" veya 3 kişi: "A B C D E F")
+        // 3.5 BELİRSİZLİK KALKANI: Tam unvan listesinde olmayan ama meslek/unvan
+        //     İPUCU taşıyan bir kelime varsa (örn. "Gelistirici", "Uzmani", "SGK
+        //     Uzmani"), bu noktadan sonra hiçbir kural (ne MUHABIR KAMERAMAN ne
+        //     de METIN) kesin karar vermemeli. Çünkü:
+        //     - "SGK Uzmani Aleyna" gibi kısaltma+unvan+isim kombinasyonları
+        //       AllNameLike testinden (ünlü/ünsüz sezgisi) yanlışlıkla düşüp
+        //       KJ METIN'e kayabilir.
+        //     - "Yazilim Gelistirici Emre Tutun" gibi durumlar da MUHABIR
+        //       KAMERAMAN'a yanlışlıkla kayabilir.
+        //     Bu yüzden meslek ipucu varsa direkt ML'e bırakıyoruz; ML bu tür
+        //     karmaşık/yeni unvan kombinasyonlarında kurallardan daha güvenilir.
+        // ============================================================
+        if (MeslekIpucuVarMi(lower))
+            return null;
+
+        // ============================================================
+        // 4. MUHABİR KAMERAMAN — unvansız çift/üçlü isim kalıbı
+        //    (örn. "Cansu Canan Ozgen Emre Tutun")
         // ============================================================
         if (words.Length >= 2 && words.Length <= 6 && AllNameLike(words) && !HasHaberKaliplari(lower))
             return "MUHABIR KAMERAMAN";
@@ -222,20 +292,21 @@ public static class KjSiniflandirici
 
     private static bool HasFiilEki(string lower)
     {
-        // Sondan eşleşme + kelime sınırı kontrolü: rastgele substring eşleşmesini önlemek için
-        // her ek artık kelime SONUNDA aranıyor, metnin herhangi bir yerinde değil.
         var sonKelime = lower.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
 
         foreach (var ek in FiilEkleri)
         {
             if (lower.EndsWith(ek, StringComparison.Ordinal))
                 return true;
-            // Cümle içinde fiil olabilecek kelimeleri de yakala (örn. "... yapildi acil" gibi son kelime ek almasa da)
+
             if (sonKelime.EndsWith(ek, StringComparison.Ordinal))
                 return true;
         }
 
-        return Regex.IsMatch(lower, @"\w+(dı|di|du|dü|tı|ti|tu|tü|miş|mış|muş|müş)\b");
+        // TEHLİKELİ REGEX İPTAL EDİLDİ! İsimlerin (Necati, Hamdi, Cati) fiil sayılmasını engelliyoruz.
+        // return Regex.IsMatch(lower, @"\w+(dı|di|du|dü|tı|ti|tu|tü|miş|mış|muş|müş)\b");
+
+        return false;
     }
 
     private static bool HasHaberKaliplari(string lower)
@@ -270,9 +341,17 @@ public static class KjSiniflandirici
         var lower = kelime.ToLower(new CultureInfo("tr-TR"));
         const string unluler = "aeiouıöüâî";
 
+        // Eğer kelimede hiç ünlü harf yoksa:
         if (!lower.Any(c => unluler.Contains(c)))
-            return false;
+        {
+            // TV, SGK, THY gibi 2-4 harfli standart kısaltmalara izin ver.
+            if (kelime.Length >= 2 && kelime.Length <= 4)
+                return true;
 
+            return false;
+        }
+
+        // Yan yana 4 ünsüz kontrolü (asdasd vb. engellemek için)
         if (Regex.IsMatch(lower, $@"[^{unluler}\s]{{4,}}"))
             return false;
 
